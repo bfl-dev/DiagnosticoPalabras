@@ -1,51 +1,48 @@
 # Sistema de Minado de Código GitHub
 
-Este proyecto es una solución de análisis de datos basada en una arquitectura **Productor-Consumidor** usando contenedores Docker. El objetivo principal es extraer los nombres de métodos más frecuentes en repositorios populares de **Python** y **Java** alojados en GitHub.
+## Introducción
+Este proyecto es una solución de análisis de datos estructurada bajo una arquitectura **Productor-Consumidor** empleando contenedores Docker. El sistema se encarga de extraer, de manera automatizada y continua, los nombres de métodos y funciones más frecuentes en repositorios populares de **Python** y **Java** alojados en GitHub. El objetivo principal es proporcionar métricas en tiempo real sobre las convenciones de nombrado en la industria del software.
 
-## Arquitectura
+## Tecnologías
+El sistema está construido utilizando el siguiente stack tecnológico:
+- **Miner (Productor):** Python 3.11, librerías `ast` y `javalang` para el parsing e interacciones de red.
+- **Visualizer (Consumidor):** Node.js (Express), Vanilla JS, Chart.js.
+- **Broker y Persistencia:** Redis (Sorted Sets para recuento atómico y almacenamiento de estado).
+- **Orquestación:** Docker y Docker Compose.
 
-- **Productor (Miner)**: Aplicación Python que consulta la API de GitHub, clona/descarga código fuente, extrae los nombres de métodos y funciones utilizando [AST](https://docs.python.org/3/library/ast.html) para Python y [javalang](https://github.com/c2nes/javalang) para Java. Los métodos son tokenizados usando expresiones regulares para separar variables en camelCase, PascalCase y snake_case.
-- **Broker (Redis)**: Almacena de manera atómica la frecuencia de las palabras extraídas mediante *Sorted Sets* (`ZINCRBY`). Además, almacena el estado de reanudación (checkpoint) en caso de reinicio de la aplicación.
-- **Consumidor (Visualizer)**: Backend Node.js/Express muy liviano que expone una API para consultar el Top-N de palabras, junto a una SPA frontend en Vanilla JS interactiva que muestra gráficos en tiempo real con *Chart.js* y *WordCloud*.
+## Arquitectura (Breve)
+El proyecto se divide en tres componentes interconectados mediante una red interna de Docker:
+1. **Miner:** Consulta la API de GitHub, descarga el código fuente y extrae los tokens semánticos de los métodos. Actualiza atómicamente las frecuencias en el Broker.
+2. **Broker (Redis):** Almacena el ranking global mediante conjuntos ordenados y asegura persistencia temporal de estado (checkpoints).
+3. **Visualizer:** Consumidor ligero que consulta a Redis y muestra los resultados analíticos a través de un Dashboard interactivo (Single Page Application).
 
----
+> [!NOTE]
+> Para un desglose extendido y argumentación de todas las decisiones de diseño y supuestos del proyecto, consulta nuestra documentación técnica en [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
-## 🚀 Instalación y Despliegue
+## Guía de Inicio Rápido
 
-### Requisitos
-- **Docker** y **Docker Compose**.
-- Un Token de Acceso Personal de GitHub.
+### Requisitos Previos
+Antes de ejecutar el sistema, asegúrate de tener instalado y configurado lo siguiente en tu máquina host:
+*   **Docker** (v20.10+ recomendado).
+*   **Docker Compose** (v2.0+).
+*   Un **Token de Acceso Personal de GitHub** (Personal Access Token). Puedes generarlo gratuitamente desde la [Configuración de Desarrollador de GitHub](https://github.com/settings/tokens).
 
-### 1. Configurar Variables de Entorno
+### 1. Configuración del Entorno
+Es necesario parametrizar las variables de entorno de ambos microservicios. Copia el archivo de entorno de ejemplo provisto en la raíz del repositorio:
 
 ```bash
 cp .env.example .env
 ```
-Edita el archivo `.env` y añade tu [GitHub Token](https://github.com/settings/tokens) en la variable `GITHUB_TOKEN`.
+Posteriormente, abre el archivo `.env` recién creado con tu editor de texto e ingresa tu token temporal en la variable `GITHUB_TOKEN`.
 
-### 2. Levantar el Entorno
-
-Con un solo comando, puedes compilar las imágenes e iniciar todos los servicios:
+### 2. Claridad de Ejecución
+El proyecto está completamente dockerizado para evitar conflictos de sistema. Para levantar todos los servicios (Miner, Redis y Visualizer), ejecuta este **único comando** en tu terminal:
 
 ```bash
-docker-compose up --build
+docker-compose up --build -d
 ```
+*(El argumento `-d` mantendrá los contenedores corriendo silenciosamente en segundo plano. Omítelo si prefieres estudiar la secuencia de logs de la aplicación en vivo).*
 
-### 3. Visualizar en Tiempo Real
-
-Abre tu navegador web e ingresa a:
+### 3. Visualización en Tiempo Real
+Con la orquestación en marcha, puedes acceder al panel de analíticas alojado por el servidor Express desde de tu navegador weab en:
 👉 **[http://localhost:3000](http://localhost:3000)**
-
----
-
-## Decisiones de Diseño
-
-- **AST y javalang vs Expresiones Regulares Directas:** Extraer firmas de métodos por Regex es muy propenso a errores (e.g. código comentado, strings multilinea). El uso de árboles de sintaxis abstracta (AST para Python, javalang para Java) garantiza la recolección precisa *únicamente* de nombres de funciones/métodos declarados.
-- **Redis Sorted Sets:** Esta estructura permite el conteo ultra rápido referenciado por una clave, ideal para analíticas en tiempo real. `ZINCRBY` incrementa el score del token de forma atómica en un único servidor de Redis.
-- **Manejo de Estado (Checkpoints):** Es posible que el miner se detenga por reinicio del contenedor o agotamiento crítico de llamadas de la API. Guardar la paginación de los repositorios en una clave `miner:checkpoint` permite reanudar donde se dejó el proceso.
-- **Arquitectura Productor-Consumidor:** Descopla el proceso intensivo de red, CPU (Regex+AST) del cliente ligero de visualización. De esta manera el front-end siempre se mantendrá receptivo e independiente del rate-limiting de GitHub del miner.
-
-## TODO
-- Añadir al visualizador una caja con los datos crudos. y resumen de los datos recibidos y presentados.
-- Revisar el README.md 
-- Realisar la documentacion basica de la implementacion (Deciciones de diseño, supuestos, etc)
